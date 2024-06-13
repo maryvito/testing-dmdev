@@ -2,9 +2,9 @@ package com.dmdev.junit.service;
 
 import com.dmdev.junit.dto.User;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class UserService {
 
@@ -14,7 +14,23 @@ public class UserService {
         return users;
     }
 
-    public boolean add(User user) {
-        return users.add(user);
+    public boolean add(User... users) {
+        return this.users.addAll(Arrays.asList(users));
+    }
+
+
+    public Optional<User> login(String username, String password) {
+        if (username == null || password == null) {
+            throw new IllegalArgumentException("username or password is null");
+        }
+
+        return users.stream()
+                .filter(user -> user.getUsername().equals(username))
+                .filter(user -> user.getPassword().equals(password))
+                .findFirst();
+    }
+
+    public Map<Integer, User> getAllConvertedById() {
+        return users.stream().collect(Collectors.toMap(User::getId, Function.identity()));
     }
 }
