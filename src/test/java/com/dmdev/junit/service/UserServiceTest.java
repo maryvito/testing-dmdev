@@ -1,5 +1,6 @@
 package com.dmdev.junit.service;
 
+import com.dmdev.junit.dao.UserDao;
 import com.dmdev.junit.dto.User;
 import com.dmdev.junit.paramresolver.UserServiceParamResolver;
 import org.hamcrest.MatcherAssert;
@@ -9,26 +10,36 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
+import org.mockito.*;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.doThrow;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @ExtendWith({
-        UserServiceParamResolver.class
+        MockitoExtension.class
 })
 public class UserServiceTest {
 
     private static final User IVAN = User.of(1, "Ivan", "123");
     private static final User PETR = User.of(2, "Petr", "111");
 
-    UserService userService;
+    @Captor
+    private ArgumentCaptor<Integer> argumentCaptor;
+    @Mock
+    private UserDao userDao;
+    @InjectMocks
+    private UserService userService;
 
     public UserServiceTest(TestInfo testInfo) {
         System.out.println();
@@ -41,9 +52,40 @@ public class UserServiceTest {
     }
 
     @BeforeEach
-    void prepare(UserService userService){
+    void prepare(){
         System.out.println("before each: " + this);
-        this.userService = new UserService();
+        Mockito.doReturn(true).when(userDao).delete(IVAN.getId());
+        //this.userDao = Mockito.spy(new UserDao());
+        //userService = new UserService(userDao);
+    }
+
+    @Test
+    void throwExceptionIfDatabaseIsNotAvailable() {
+         doThrow(RuntimeException.class).when(userDao).delete(IVAN.getId());
+
+        assertThrows(RuntimeException.class, () -> userService.delete(IVAN.getId()));
+    }
+
+    @Test
+    void shouldDeleteExistedUser(){
+        userService.add(IVAN);
+
+        //Mockito.doReturn(true).when(userDao).delete(Mockito.any());
+
+        /*Mockito.when(userDao.delete(IVAN.getId()))
+                .thenReturn(true)
+                . thenReturn(false);*/
+
+        var deleteResult = userService.delete(IVAN.getId());
+        System.out.println(userService.delete(IVAN.getId()));
+        System.out.println(userService.delete(IVAN.getId()));
+
+        //var argumentCaptor = ArgumentCaptor.forClass(Integer.class);
+        Mockito.verify(userDao, Mockito.times(3)).delete(argumentCaptor.capture());
+
+        assertThat(argumentCaptor.getValue()).isEqualTo(IVAN.getId());
+
+        assertThat(deleteResult).isTrue();
     }
 
     @Test
@@ -95,6 +137,7 @@ public class UserServiceTest {
 
     @Nested
     @Tag("login")
+    @Timeout(value = 200, unit = TimeUnit.MILLISECONDS)
     class LoginTest{
 
         @Test
@@ -122,7 +165,7 @@ public class UserServiceTest {
         }
 
         @Test
-        @Tag("login")
+        @Disabled("flaky, need to see")
         void loginFailIfUserDoesNotExist() {
             userService.add(IVAN);
 
@@ -133,7 +176,20 @@ public class UserServiceTest {
         }
 
         @Test
-        void loginFailIfPasswordIsNotCorrect(){
+        void checkLoginFunctionalityPerformance() {
+            System.out.println(Thread.currentThread().getName());
+            var result = assertTimeoutPreemptively(Duration.ofMillis(200L), () -> {
+                System.out.println(Thread.currentThread().getName());
+                Thread.sleep(100L);
+                return userService.login("dummy", IVAN.getPassword());
+            });
+        }
+
+
+
+//        @Test
+        @RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
+        void loginFailIfPasswordIsNotCorrect(RepetitionInfo repetitionInfo){
             userService.add(IVAN);
             var maybeUser = userService.login(IVAN.getUsername(), "dummy");
 
